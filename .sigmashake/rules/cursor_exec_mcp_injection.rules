@@ -1,0 +1,59 @@
+# cursor_exec_mcp_injection.rules — Cursor MCP injection and execution safety.
+# Technology: cursor | Capability: exec
+# Covers: CurXecute MCP config rewrite (CVE-2025-54135), MCP config swap (CVE-2025-54136),
+# .vscode/tasks.json auto-execution, extension installs, and workspace trust bypass.
+
+rule no-cursor-mcp-config-rewrite {
+  enabled true
+  priority 100
+  severity error
+  DENY write
+  IF path CONTAINS ".cursor/mcp.json"
+  OR path REGEX "\\.cursor/mcp"
+  OR path REGEX "cursor.*mcp.*config"
+  MESSAGE "CVE-2025-54135 (CurXecute): Writing to .cursor/mcp.json leads to RCE via prompt injection. Attackers craft malicious Slack messages that, when summarized by Cursor, rewrite MCP config to point to attacker-controlled servers and execute arbitrary commands with developer privileges. MCP config must be managed manually."
+}
+
+rule no-cursor-mcp-config-swap {
+  enabled true
+  priority 100
+  severity error
+  DENY execution
+  IF command REGEX "(cp|mv|ln\\s+-s)\\s+.*mcp\\.json"
+  OR command REGEX "(cp|mv|ln)\\s+.*\\.cursor/"
+  OR command REGEX "symlink.*mcp"
+  MESSAGE "CVE-2025-54136: MCP config file swap enables arbitrary code execution. If an attacker has write access to branches containing MCP server configs, they can swap harmless configs with malicious ones. Copying or symlinking MCP configs is blocked."
+}
+
+rule no-cursor-vscode-tasks-write {
+  enabled true
+  priority 95
+  severity error
+  DENY write
+  IF path REGEX "\\.vscode/tasks\\.json"
+  OR path REGEX "\\.vscode/launch\\.json"
+  MESSAGE "Cursor ships with VS Code Workspace Trust disabled by default. Writing .vscode/tasks.json with runOptions.runOn: 'folderOpen' causes auto-execution of arbitrary commands when any developer opens the project. A 'casual open folder becomes silent code execution' (Oasis Security). These files must be created manually by the developer."
+}
+
+rule ask-cursor-settings-modification {
+  enabled true
+  priority 85
+  severity warning
+  ASK write
+  IF path REGEX "\\.vscode/settings\\.json"
+  OR path REGEX "\\.cursor/settings"
+  OR path ENDS_WITH ".cursorrules"
+  MESSAGE "Cursor editor settings modification. With workspace trust disabled by default, malicious settings can reference external tools, auto-execute scripts, or override security boundaries. Review before writing."
+  PROMPT "Review the settings content. Does it add MCP servers, task runners, or external tool references? Cursor's workspace trust is disabled by default, meaning these settings take effect without confirmation."
+}
+
+rule log-cursor-extension-install {
+  enabled true
+  priority 65
+  severity info
+  LOG execution
+  IF command CONTAINS "cursor --install-extension"
+  OR command CONTAINS "code --install-extension"
+  OR command REGEX "cursor.*extension.*install"
+  MESSAGE "Extension installation detected. Malicious VS Code extensions are a documented attack surface. Verify the extension publisher, download count, and last updated date on the marketplace before installing."
+}

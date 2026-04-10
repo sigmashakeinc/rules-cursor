@@ -1,0 +1,62 @@
+# cursor_write_supply_chain.rules — Cursor supply chain and config write protection.
+# Technology: cursor | Capability: write
+# Covers: malicious lifecycle scripts in package.json, .cursorrules prompt injection,
+# MCP server references, eval in config, and rules file auditing.
+
+rule ask-cursor-package-lifecycle-scripts {
+  enabled true
+  priority 90
+  severity warning
+  ASK write
+  IF path ENDS_WITH "package.json" AND content LINE_REGEX "\"(preinstall|postinstall|prepare)\"\\s*:"
+  OR path ENDS_WITH "package.json" AND content LINE_REGEX "\"(prebuild|postbuild)\"\\s*:" AND content CONTAINS "curl"
+  OR path ENDS_WITH "package.json" AND content LINE_REGEX "\"(preinstall|postinstall)\"\\s*:.*curl"
+  MESSAGE "Lifecycle script in package.json. Malicious npm packages targeting Cursor users use preinstall/postinstall hooks to execute arbitrary code silently during npm install. These scripts run with developer privileges and can exfiltrate data before the package is even imported."
+  PROMPT "Review this lifecycle script carefully. Does it download external resources, execute shell commands, or access files outside the package directory? Malicious npm packages targeting Cursor use install hooks for immediate code execution."
+}
+
+rule no-cursor-rules-prompt-injection {
+  enabled true
+  priority 95
+  severity error
+  DENY write
+  IF path ENDS_WITH ".cursorrules" AND content LINE_REGEX "(?i)ignore\\s+previous"
+  OR path ENDS_WITH ".cursorrules" AND content LINE_REGEX "(?i)disregard\\s+(all|the|previous)"
+  OR path ENDS_WITH ".cursorrules" AND content LINE_REGEX "(?i)system\\s*:\\s*you\\s+are"
+  OR path ENDS_WITH ".cursorrules" AND content LINE_REGEX "(?i)you\\s+are\\s+now\\s+a"
+  MESSAGE "Prompt injection in .cursorrules file. This file controls Cursor's AI behavior across all sessions in the project. Injecting system prompt overrides can disable Cursor's safety features and enable arbitrary code execution via the AI layer."
+}
+
+rule ask-cursor-mcp-server-reference {
+  enabled true
+  priority 85
+  severity warning
+  ASK write
+  IF content CONTAINS "mcp-server" AND content LINE_REGEX "(npx|uvx|node|python)"
+  OR content LINE_REGEX "\"command\"\\s*:\\s*\"(npx|uvx|node|python3?)\"" AND content CONTAINS "mcp"
+  OR content LINE_REGEX "\"(mcp-server|@modelcontextprotocol)"
+  MESSAGE "MCP server reference in written config. CVE-2025-54135 (CurXecute) exploited prompt injection to rewrite MCP configs pointing to attacker-controlled servers. Verify the MCP server source before writing."
+  PROMPT "Is this MCP server from a verified, trusted publisher? CurXecute attacks used malicious MCP servers to achieve RCE with developer privileges. Verify the npx package name, author, and download count."
+}
+
+rule no-cursor-eval-in-vscode-config {
+  enabled true
+  priority 90
+  severity error
+  DENY write
+  IF path REGEX "\\.(cursor|vscode)/" AND content LINE_REGEX "eval\\s*\\("
+  OR path REGEX "\\.(cursor|vscode)/" AND content LINE_REGEX "new Function\\s*\\("
+  OR path REGEX "\\.(cursor|vscode)/" AND content LINE_REGEX "child_process"
+  MESSAGE "Code execution construct in Cursor/VS Code config. Combined with workspace trust disabled by default, eval/Function/child_process in config files achieves automatic code execution when the project opens — without any developer confirmation."
+}
+
+rule log-cursor-rules-write {
+  enabled true
+  priority 55
+  severity info
+  LOG write
+  IF path ENDS_WITH ".cursorrules"
+  OR path ENDS_WITH ".cursorignore"
+  OR path ENDS_WITH ".cursorindexingignore"
+  MESSAGE "Cursor rules file written. These files control AI behavior and file access scope. Audit for prompt injection patterns or safety override attempts before committing."
+}

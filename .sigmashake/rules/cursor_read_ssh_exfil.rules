@@ -1,0 +1,55 @@
+# cursor_read_ssh_exfil.rules — Cursor SSH key and credential read protection.
+# Technology: cursor | Capability: read
+# Covers: SSH private key theft, npm token access, dotfile reading,
+# and environment file auditing in Cursor sessions.
+
+rule no-cursor-ssh-private-key-read {
+  enabled true
+  priority 100
+  severity error
+  DENY read
+  IF path REGEX "\\.ssh/id_"
+  OR path REGEX "\\.ssh/.*_rsa$"
+  OR path REGEX "\\.ssh/.*_ed25519$"
+  OR path REGEX "\\.ssh/.*_ecdsa$"
+  OR path REGEX "\\.ssh/.*_dsa$"
+  OR path ENDS_WITH ".ssh/config"
+  MESSAGE "SSH key exfiltration attempt. Cursor security research documented SSH private key theft via prompt injection: 'attackers can leak private SSH keys by leveraging benign tools in tool combination attacks'. Reading SSH keys enables unauthorized server access, GitHub SSH auth, and deployment key abuse."
+}
+
+rule no-cursor-npm-credentials-read {
+  enabled true
+  priority 95
+  severity error
+  DENY read
+  IF path ENDS_WITH ".npmrc"
+  OR path ENDS_WITH ".yarnrc"
+  OR path ENDS_WITH ".yarnrc.yml"
+  OR path REGEX "npm.*token"
+  MESSAGE "NPM credential file access. Malicious npm packages specifically targeting Cursor users have been documented (SecurityWeek). Reading npm tokens could enable supply chain attacks via compromised package publishes to the npm registry."
+}
+
+rule ask-cursor-dotfile-read {
+  enabled true
+  priority 75
+  severity warning
+  ASK read
+  IF path REGEX "^/home/[^/]+/\\.[a-z]"
+  OR path REGEX "^/root/\\.[a-z]"
+  OR path REGEX "/\\.[a-z]+rc$"
+  OR path REGEX "/\\.[a-z]+credentials$"
+  MESSAGE "Home directory dotfile access from Cursor. Cursor's workspace trust disabled by default means project-level configs can trigger dotfile access. Dotfiles often contain tokens, credentials, and private config for cloud providers, git hosts, and package registries."
+  PROMPT "Is this dotfile from the project directory or the home directory? Home dotfiles (.npmrc, .gitconfig, .aws/credentials) contain sensitive tokens. Project dotfiles from untrusted repos may be malicious."
+}
+
+rule log-cursor-env-file-read {
+  enabled true
+  priority 60
+  severity info
+  LOG read
+  IF path ENDS_WITH ".env"
+  OR path ENDS_WITH ".env.local"
+  OR path ENDS_WITH ".env.production"
+  OR path REGEX "\\.env\\.[a-z]+"
+  MESSAGE "Environment file accessed in Cursor session. Logging for exfiltration detection. SSH key and API token theft attacks targeting Cursor (CVE-2025-54135/54136) often begin with reading .env files to discover available credentials."
+}

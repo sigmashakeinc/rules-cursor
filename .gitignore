@@ -1,0 +1,5 @@
+# Demo recordings (webm source files — not published to public ruleset repos)
+demo.webm
+
+# Scenario test files (monorepo-internal certification tests)
+.sigmashake/scenarios/
