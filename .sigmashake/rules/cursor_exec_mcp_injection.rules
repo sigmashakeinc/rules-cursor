@@ -39,12 +39,11 @@ rule ask-cursor-settings-modification {
   enabled true
   priority 85
   severity warning
-  ASK write
+  LOG write
   IF path REGEX "\\.vscode/settings\\.json"
   OR path REGEX "\\.cursor/settings"
   OR path ENDS_WITH ".cursorrules"
   MESSAGE "Cursor editor settings modification. With workspace trust disabled by default, malicious settings can reference external tools, auto-execute scripts, or override security boundaries. Review before writing."
-  PROMPT "Review the settings content. Does it add MCP servers, task runners, or external tool references? Cursor's workspace trust is disabled by default, meaning these settings take effect without confirmation."
 }
 
 rule log-cursor-extension-install {

@@ -7,12 +7,11 @@ rule ask-cursor-package-lifecycle-scripts {
   enabled true
   priority 90
   severity warning
-  ASK write
+  LOG write
   IF path ENDS_WITH "package.json" AND content LINE_REGEX "\"(preinstall|postinstall|prepare)\"\\s*:"
   OR path ENDS_WITH "package.json" AND content LINE_REGEX "\"(prebuild|postbuild)\"\\s*:" AND content CONTAINS "curl"
   OR path ENDS_WITH "package.json" AND content LINE_REGEX "\"(preinstall|postinstall)\"\\s*:.*curl"
   MESSAGE "Lifecycle script in package.json. Malicious npm packages targeting Cursor users use preinstall/postinstall hooks to execute arbitrary code silently during npm install. These scripts run with developer privileges and can exfiltrate data before the package is even imported."
-  PROMPT "Review this lifecycle script carefully. Does it download external resources, execute shell commands, or access files outside the package directory? Malicious npm packages targeting Cursor use install hooks for immediate code execution."
 }
 
 rule no-cursor-rules-prompt-injection {
@@ -31,12 +30,11 @@ rule ask-cursor-mcp-server-reference {
   enabled true
   priority 85
   severity warning
-  ASK write
+  LOG write
   IF content CONTAINS "mcp-server" AND content LINE_REGEX "(npx|uvx|node|python)"
   OR content LINE_REGEX "\"command\"\\s*:\\s*\"(npx|uvx|node|python3?)\"" AND content CONTAINS "mcp"
   OR content LINE_REGEX "\"(mcp-server|@modelcontextprotocol)"
   MESSAGE "MCP server reference in written config. CVE-2025-54135 (CurXecute) exploited prompt injection to rewrite MCP configs pointing to attacker-controlled servers. Verify the MCP server source before writing."
-  PROMPT "Is this MCP server from a verified, trusted publisher? CurXecute attacks used malicious MCP servers to achieve RCE with developer privileges. Verify the npx package name, author, and download count."
 }
 
 rule no-cursor-eval-in-vscode-config {
